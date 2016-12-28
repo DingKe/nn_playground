@@ -1,20 +1,22 @@
 Simple example Variational Auto-Encoder (VAE) on MNIST
 
-# Learned latent space
-## MSE loss
+> This repo is with the [blog on VAE (in Chinese)](http://blog.csdn.net/jackytintin/article/details/53641885).
+
+## Learned latent space
+### MSE loss
 ![](./img/z_mse.png)
-## crossentropy loss
+### crossentropy loss
 ![](./img/z_xent.png)
 
-# Learned manifold 
-## MSE loss
+## Learned manifold 
+### MSE loss
 ![](./img/x_mse.png)
-## crossentropy loss
+### crossentropy loss
 ![](./img/x_xent.png)
 
 
-# Imputation
-## MSE loss
+## Imputation
+### MSE loss
 ![](./img/i_mse.png)
-## crossentropy loss
+### crossentropy loss
 ![](./img/i_xent.png)
