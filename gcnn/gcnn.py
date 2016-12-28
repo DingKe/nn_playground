@@ -47,29 +47,21 @@ class GCNN(Layer):
 
     def build(self, input_shape):
         input_dim = input_shape[2]
+        self.input_dim = input_dim
         self.input_spec = [InputSpec(shape=input_shape)]
         self.W_shape = (self.window_size, 1, input_dim, self.output_dim * 2)
-
-        self.W = self.init(self.W_shape, name='{}_W'.format(self.name))
-        self.trainable_weights = [self.W]
+        self.W = self.add_weight(self.W_shape,
+                                 initializer=self.init,
+                                 name='{}_W'.format(self.name),
+                                 regularizer=self.W_regularizer,
+                                 constraint=self.W_constraint)
 
         if self.bias:
-            self.b = K.zeros((self.output_dim * 2,), name='{}_b'.format(self.name))
-            self.trainable_weights += [self.b]
-
-        self.regularizers = []
-        if self.W_regularizer:
-            self.W_regularizer.set_param(self.W)
-            self.regularizers.append(self.W_regularizer)
-        if self.bias and self.b_regularizer:
-            self.b_regularizer.set_param(self.b)
-            self.regularizers.append(self.b_regularizer)
-
-        self.constraints = {}
-        if self.W_constraint:
-            self.constraints[self.W] = self.W_constraint
-        if self.bias and self.b_constraint:
-            self.constraints[self.b] = self.b_constraint
+            self.b = self.add_weight((self.output_dim * 2,),
+                                     initializer='zero',
+                                     name='{}_b'.format(self.name),
+                                     regularizer=self.b_regularizer,
+                                     constraint=self.b_constraint)
 
         if self.initial_weights is not None:
             self.set_weights(self.initial_weights)

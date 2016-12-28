@@ -76,34 +76,19 @@ class QRNN(Layer):
 
         input_dim = input_shape[2]
         self.input_spec = [InputSpec(shape=input_shape)]
-        self.W_shape = (self.window_size, 1, input_dim, self.output_dim)
+        self.W_shape = (self.window_size, 1, input_dim, self.output_dim * 3)
 
-        self.W_z = self.init(self.W_shape, name='{}_W_z'.format(self.name))
-        self.W_f = self.init(self.W_shape, name='{}_W_f'.format(self.name))
-        self.W_o = self.init(self.W_shape, name='{}_W_o'.format(self.name))
-        self.trainable_weights = [self.W_z, self.W_f, self.W_o]
-        self.W = K.concatenate([self.W_z, self.W_f, self.W_o], 1) 
-
+        self.W = self.add_weight(self.W_shape,
+                                 initializer=self.init,
+                                 name='{}_W'.format(self.name),
+                                 regularizer=self.W_regularizer,
+                                 constraint=self.W_constraint)
         if self.bias:
-            self.b_z = K.zeros((self.output_dim,), name='{}_b_z'.format(self.name))
-            self.b_f = K.zeros((self.output_dim,), name='{}_b_f'.format(self.name))
-            self.b_o = K.zeros((self.output_dim,), name='{}_b_o'.format(self.name))
-            self.trainable_weights += [self.b_z, self.b_f, self.b_o]
-            self.b = K.concatenate([self.b_z, self.b_f, self.b_o])
-
-        self.regularizers = []
-        if self.W_regularizer:
-            self.W_regularizer.set_param(self.W)
-            self.regularizers.append(self.W_regularizer)
-        if self.bias and self.b_regularizer:
-            self.b_regularizer.set_param(self.b)
-            self.regularizers.append(self.b_regularizer)
-
-        self.constraints = {}
-        if self.W_constraint:
-            self.constraints[self.W] = self.W_constraint
-        if self.bias and self.b_constraint:
-            self.constraints[self.b] = self.b_constraint
+            self.b = self.add_weight((self.output_dim * 3,),
+                                     initializer='zero',
+                                     name='{}_b'.format(self.name),
+                                     regularizer=self.b_regularizer,
+                                     constraint=self.b_constraint)
 
         if self.initial_weights is not None:
             self.set_weights(self.initial_weights)
@@ -176,36 +161,26 @@ class QRNN(Layer):
             return last_output
 
     def preprocess_input(self, x):
-        if self.bias:
-            weights = zip(self.trainable_weights[0:3], self.trainable_weights[3:])
-        else:
-            weights = self.trainable_weights
-
         if self.window_size > 1:
             x = K.asymmetric_temporal_padding(x, self.window_size-1, 0)
         x = K.expand_dims(x, 2)  # add a dummy dimension
 
-        # z, f, o
-        outputs = []
-        for param in weights:
-            if self.bias:
-               W, b = param
-            else:
-               W = param
-            output = K.conv2d(x, W, strides=self.subsample,
-                              border_mode='valid',
-                              dim_ordering='tf')
-            output = K.squeeze(output, 2)  # remove the dummy dimension
-            if self.bias:
-                output += K.reshape(b, (1, 1, self.output_dim))
-
-            outputs.append(output)
+        output = K.conv2d(x, self.W, strides=self.subsample,
+                          border_mode='valid',
+                          dim_ordering='tf')
+        output = K.squeeze(output, 2)  # remove the dummy dimension
+        if self.bias:
+            output += K.reshape(self.b, (1, 1, self.output_dim * 3))
 
         if self.dropout is not None and 0. < self.dropout < 1.:
-            f = K.sigmoid(outputs[1])
-            outputs[1] = K.in_train_phase(1 - _dropout(1 - f, self.dropout), f)
+            z = output[:, :, :self.output_dim]
+            f = output[:, :, self.output_dim:2 * self.output_dim]
+            o = output[:, :, 2 * self.output_dim:]
+            f = K.in_train_phase(1 - _dropout(1 - f, self.dropout), f)
+            return K.concatenate([z, f, o], -1)
+        else:
+            return output
 
-        return K.concatenate(outputs, 2)
 
     def step(self, input, states):
         prev_output = states[0]

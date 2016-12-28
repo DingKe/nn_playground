@@ -45,13 +45,14 @@ class TernaryDense(Dense):
     def build(self, input_shape):
         assert len(input_shape) == 2
         input_dim = input_shape[1]
+        self.input_dim = input_dim
         self.input_spec = [InputSpec(dtype=K.floatx(),
-                                     shape=(None, input_dim))]
+                                     ndim='2+')]
 
         if self.H == 'Glorot':
             self.H = np.float32(np.sqrt(1.5 / (input_dim + self.output_dim)))
             #print('Glorot H: {}'.format(self.H))
-            
+
         if self.W_lr_multiplier == 'Glorot':
             self.W_lr_multiplier = np.float32(1. / np.sqrt(1.5 / (input_dim + self.output_dim)))
             #print('Glorot learning rate multiplier: {}'.format(self.lr_multiplier))
@@ -59,39 +60,24 @@ class TernaryDense(Dense):
         self.W_constraint = Clip(-self.H, self.H)
         
         self.init = initializations.get('uniform')
-        self.W = self.init((input_dim, self.output_dim), scale=self.H,
-                           name='{}_W'.format(self.name))
-        self.trainable_weights = [self.W]
+        self.init_func = lambda shape, name: self.init(shape, scale=self.H, name=name)
+        self.W = self.add_weight((input_dim, self.output_dim),
+                                 initializer=self.init_func,
+                                 name='{}_W'.format(self.name),
+                                 regularizer=self.W_regularizer,
+                                 constraint=self.W_constraint)
 
         if self.bias:
             self.lr_multipliers = [self.W_lr_multiplier, self.b_lr_multiplier]
         else:
             self.lr_multipliers = [self.W_lr_multiplier]
         
-        self.regularizers = []
-        if self.W_regularizer:
-            self.W_regularizer.set_param(self.W)
-            self.regularizers.append(self.W_regularizer)
-
-        if self.activity_regularizer:
-            self.activity_regularizer.set_layer(self)
-            self.regularizers.append(self.activity_regularizer)
-
-        self.constraints = {}
-        if self.W_constraint:
-            self.constraints[self.W] = self.W_constraint
-
         if self.bias:
-            self.b = K.zeros((self.output_dim,),
-                             name='{}_b'.format(self.name))
-            self.trainable_weights += [self.b]
-
-            if self.b_regularizer:
-                self.b_regularizer.set_param(self.b)
-                self.regularizers.append(self.b_regularizer)
-
-            if self.b_constraint:
-                self.constraints[self.b] = self.b_constraint
+            self.b = self.add_weight((self.output_dim,),
+                                     initializer='zero',
+                                     name='{}_b'.format(self.name),
+                                     regularizer=self.b_regularizer,
+                                     constraint=self.b_constraint)
 
         if self.initial_weights is not None:
             self.set_weights(self.initial_weights)
