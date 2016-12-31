@@ -119,7 +119,7 @@ class BinaryConvolution2D(Convolution2D):
             stack_size = input_shape[3]
             self.W_shape = (self.nb_row, self.nb_col, stack_size, self.nb_filter)
         else:
-            raise ValueError('Invalid dim_ordering: ' + str(self.dim_ordering))
+            raise Exception('Invalid dim_ordering: ' + self.dim_ordering)
             
         if self.H == 'Glorot':
             nb_input = int(stack_size * self.nb_row * self.nb_col)
@@ -174,7 +174,7 @@ class BinaryConvolution2D(Convolution2D):
             elif self.dim_ordering == 'tf':
                 conv_out = conv_out + K.reshape(self.b, (1, 1, 1, self.nb_filter))
             else:
-                raise ValueError('Invalid dim_ordering: ' + str(self.dim_ordering))
+                raise Exception('Invalid dim_ordering: ' + self.dim_ordering)
                 
         output = self.activation(conv_out)
         return output

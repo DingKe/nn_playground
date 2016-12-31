@@ -3,8 +3,10 @@ An implemtation of binaryNet for Keras.
 The binarized Dense and Conv2D are two keras layers, thus can be integrated into keras framework out of box.
 
 ## To run the demo:
-python mnist_mlp.py # train a binary MLP model on MNIST
-python mnist_cnn.py # train a binary CNN model on MNIST
+### train a binary MLP model on MNIST
+python mnist_mlp.py 
+### train a binary CNN model on MNIST
+python mnist_cnn.py 
 
 The code is according to the [theano version](https://github.com/MatthieuCourbariaux/BinaryNet).
 The only missing ingredient is that the learning rate is not scaled w.r.t. weight' fan-in & fan-out. 

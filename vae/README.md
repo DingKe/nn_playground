@@ -1,4 +1,4 @@
-Simple example Variational Auto-Encoder (VAE) on MNIST
+Simple keras implementation of Variational Auto-Encoder (VAE) on MNIST
 
 > This repo is with the [blog on VAE (in Chinese)](http://blog.csdn.net/jackytintin/article/details/53641885).
 

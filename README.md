@@ -1,6 +1,9 @@
 # binarynet
 Binary Networks
 
+# xnornet
+XNOR Networks
+
 # ternarynet
 Ternary Networks
 
