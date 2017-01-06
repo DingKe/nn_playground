@@ -1,6 +1,9 @@
-'''Trains a simple xnor CNN on the MNIST dataset.
+'''Trains a simple CNN with weight normalization on the MNIST dataset.
 Modified from keras' examples/mnist_mlp.py
-Gets to 98.18% test accuracy after 20 epochs using tensorflow backend
+w/o WN:
+Gets to 99.25% test accuracy after 12 epochs
+w/ WN:
+Gets to 99.45% test accuracy after 10 epochs using tensorflow backend
 '''
 
 from __future__ import print_function
@@ -15,12 +18,8 @@ from keras.optimizers import SGD, Adam, RMSprop
 from keras.callbacks import LearningRateScheduler
 from keras.utils import np_utils
 
-from binary_ops import binary_tanh as binary_tanh_op
-from xnor_layers import XnorDense, XnorConvolution2D
+from weight_norm_layers import *
 
-
-H = 1.
-W_lr_multiplier = 'Glorot'
 
 # nn
 batch_size = 50
@@ -61,42 +60,42 @@ print(X_train.shape[0], 'train samples')
 print(X_test.shape[0], 'test samples')
 
 # convert class vectors to binary class matrices
-Y_train = np_utils.to_categorical(y_train, nb_classes) * 2 - 1 # -1 or 1 for hinge loss
-Y_test = np_utils.to_categorical(y_test, nb_classes) * 2 - 1
+Y_train = np_utils.to_categorical(y_train, nb_classes) 
+Y_test = np_utils.to_categorical(y_test, nb_classes)
 
 
 model = Sequential()
 # conv1
-model.add(XnorConvolution2D(128, 3, 3, input_shape=(nb_channel, img_rows, img_cols),
-                              H=H, W_lr_multiplier=W_lr_multiplier, 
-                              border_mode='same', bias=bias, name='conv1'))
-model.add(BatchNormalization(epsilon=epsilon, momentum=momentum, axis=1, name='bn1'))
+model.add(WeightNormConv2D(128, 3, 3, input_shape=(nb_channel, img_rows, img_cols),
+                           border_mode='same', bias=bias, name='conv1'))
+#model.add(BatchNormalization(epsilon=epsilon, momentum=momentum, axis=1, name='bn1'))
 model.add(Activation('relu', name='act1'))
 # conv2
-model.add(XnorConvolution2D(128, 3, 3, H=H, W_lr_multiplier=W_lr_multiplier, 
+model.add(WeightNormConv2D(128, 3, 3,
                               border_mode='same', bias=bias, name='conv2'))
 model.add(MaxPooling2D(pool_size=(2, 2), name='pool2'))
-model.add(BatchNormalization(epsilon=epsilon, momentum=momentum, axis=1, name='bn2'))
+#model.add(BatchNormalization(epsilon=epsilon, momentum=momentum, axis=1, name='bn2'))
 model.add(Activation('relu', name='act2'))
 # conv3
-model.add(XnorConvolution2D(256, 3, 3, H=H, W_lr_multiplier=W_lr_multiplier,
+model.add(WeightNormConv2D(256, 3, 3,
                               border_mode='same', bias=bias, name='conv3'))
-model.add(BatchNormalization(epsilon=epsilon, momentum=momentum, axis=1, name='bn3'))
+#model.add(BatchNormalization(epsilon=epsilon, momentum=momentum, axis=1, name='bn3'))
 model.add(Activation('relu', name='act3'))
 # conv4
-model.add(XnorConvolution2D(256, 3, 3, H=H, W_lr_multiplier=W_lr_multiplier,
+model.add(WeightNormConv2D(256, 3, 3,
                               border_mode='same', bias=bias, name='conv4'))
 model.add(MaxPooling2D(pool_size=(2, 2), name='pool4'))
-model.add(BatchNormalization(epsilon=epsilon, momentum=momentum, axis=1, name='bn4'))
+#model.add(BatchNormalization(epsilon=epsilon, momentum=momentum, axis=1, name='bn4'))
 model.add(Activation('relu', name='act4'))
 model.add(Flatten())
 # dense1
-model.add(XnorDense(1024, H=H, W_lr_multiplier=W_lr_multiplier, bias=bias, name='dense5'))
-model.add(BatchNormalization(epsilon=epsilon, momentum=momentum, name='bn5'))
+model.add(WeightNormDense(1024, bias=bias, name='dense5'))
+#model.add(BatchNormalization(epsilon=epsilon, momentum=momentum, name='bn5'))
 model.add(Activation('relu', name='act5'))
 # dense2
-model.add(XnorDense(nb_classes, H=H, W_lr_multiplier=W_lr_multiplier, bias=bias, name='dense6'))
-model.add(BatchNormalization(epsilon=epsilon, momentum=momentum, name='bn6'))
+model.add(WeightNormDense(nb_classes, bias=bias, name='dense6'))
+#model.add(BatchNormalization(epsilon=epsilon, momentum=momentum, name='bn6'))
+model.add(Activation('softmax', name='act6'))
 
 opt = Adam(lr=lr_start) 
 model.compile(loss='squared_hinge', optimizer=opt, metrics=['acc'])

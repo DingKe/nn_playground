@@ -15,3 +15,6 @@ Variational Auto-Encoder
 
 # gcnn
 Gated Convolutional Nueral Networks
+
+# weighnorm
+Weight Normalization
