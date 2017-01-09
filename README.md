@@ -18,3 +18,6 @@ Gated Convolutional Nueral Networks
 
 # weighnorm
 Weight Normalization
+
+# layernorm
+Layer Normalization
