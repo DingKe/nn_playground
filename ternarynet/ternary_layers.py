@@ -3,11 +3,11 @@ import numpy as np
 
 from keras import backend as K
 
-from keras.layers import InputSpec, Layer, Dense, Convolution2D
+from keras.layers import InputSpec, Dense, Conv2D, SimpleRNN
 from keras import constraints
 from keras import initializations
 
-from ternary_ops import ternarize
+from ternary_ops import ternarize as ternarize, ternarize_dot
 
 
 class Clip(constraints.Constraint):
@@ -84,12 +84,12 @@ class TernaryDense(Dense):
             del self.initial_weights
 
     def call(self, x, mask=None):
-        Wb = ternarize(self.W, H=self.H)
+        Wt = ternarize(self.W, H=self.H)
 
         if self.bias:
-            output = self.activation(K.dot(x, Wb) + self.b)
+            output = self.activation(K.dot(x, Wt) + self.b)
         else:
-            output = self.activation(K.dot(x, Wb))
+            output = self.activation(K.dot(x, Wt))
         return output
         
     def get_config(self):
@@ -98,3 +98,117 @@ class TernaryDense(Dense):
                   'b_lr_multiplier': self.b_lr_multiplier}
         base_config = super(TernayDense, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
+
+
+class TernaryConv2D(Conv2D):
+    '''Ternarized Convolution2D layer
+    References: 
+    - [Recurrent Neural Networks with Limited Numerical Precision](http://arxiv.org/abs/1608.06902}
+    - [Ternary Weight Networks](http://arxiv.org/abs/1605.04711)
+    '''
+    def __init__(self, nb_filter, nb_row, nb_col, W_lr_multiplier='Glorot', 
+                 b_lr_multiplier=None, H=1., **kwargs):
+        self.H = H
+        self.W_lr_multiplier = W_lr_multiplier
+        self.b_lr_multiplier = b_lr_multiplier
+        
+        super(TernaryConv2D, self).__init__(nb_filter, nb_row, nb_col, **kwargs)
+        
+    def build(self, input_shape):
+        if self.dim_ordering == 'th':
+            stack_size = input_shape[1]
+            self.W_shape = (self.nb_filter, stack_size, self.nb_row, self.nb_col)
+        elif self.dim_ordering == 'tf':
+            stack_size = input_shape[3]
+            self.W_shape = (self.nb_row, self.nb_col, stack_size, self.nb_filter)
+        else:
+            raise ValueError('Invalid dim_ordering: ' + str(self.dim_ordering))
+            
+        if self.H == 'Glorot':
+            nb_input = int(stack_size * self.nb_row * self.nb_col)
+            nb_output = int(self.nb_filter * self.nb_row * self.nb_col)
+            self.H = np.float32(np.sqrt(1.5 / (nb_input + nb_output)))
+            #print('Glorot H: {}'.format(self.H))
+            
+        if self.W_lr_multiplier == 'Glorot':
+            nb_input = int(stack_size * self.nb_row * self.nb_col)
+            nb_output = int(self.nb_filter *self.nb_row * self.nb_col)
+            self.W_lr_multiplier = np.float32(1. / np.sqrt(1.5/ (nb_input + nb_output)))
+            #print('Glorot learning rate multiplier: {}'.format(self.lr_multiplier))
+            
+        self.init = initializations.get('uniform')
+        self.init_func = lambda shape, name: self.init(shape, scale=self.H, name=name)
+        self.W = self.add_weight(self.W_shape,
+                                 initializer=self.init_func,
+                                 name='{}_W'.format(self.name),
+                                 regularizer=self.W_regularizer,
+                                 constraint=self.W_constraint)
+
+        if self.bias:
+            self.lr_multipliers = [self.W_lr_multiplier, self.b_lr_multiplier]
+        else:
+            self.lr_multipliers = [self.W_lr_multiplier]
+        
+        if self.bias:
+            self.b = self.add_weight((self.output_dim,),
+                                     initializer='zero',
+                                     name='{}_b'.format(self.name),
+                                     regularizer=self.b_regularizer,
+                                     constraint=self.b_constraint)
+
+
+        W_constraint = Clip(-self.H, self.H)
+        self.constraints[self.W] = W_constraint
+
+        if self.initial_weights is not None:
+            self.set_weights(self.initial_weights)
+            del self.initial_weights
+
+    def call(self, x, mask=None):
+        Wt = ternarize(self.W, H=self.H) 
+        conv_out = K.conv2d(x, Wt, strides=self.subsample,
+                            border_mode=self.border_mode,
+                            dim_ordering=self.dim_ordering,
+                            filter_shape=self.W_shape)
+                                
+        if self.bias:
+            if self.dim_ordering == 'th':
+                conv_out = conv_out + K.reshape(self.b, (1, self.nb_filter, 1, 1))
+            elif self.dim_ordering == 'tf':
+                conv_out = conv_out + K.reshape(self.b, (1, 1, 1, self.nb_filter))
+            else:
+                raise ValueError('Invalid dim_ordering: ' + str(self.dim_ordering))
+                
+        output = self.activation(conv_out)
+        return output
+        
+    def get_config(self):
+        config = {'H': self.H,
+                  'W_lr_multiplier': self.W_lr_multiplier,
+                  'b_lr_multiplier': self.b_lr_multiplier}
+        base_config = super(BinaryConv2D, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+
+
+class TernaryRNN(SimpleRNN):
+    ''' Ternarized RNN layer
+
+    References: 
+    - [Recurrent Neural Networks with Limited Numerical Precision](http://arxiv.org/abs/1608.06902}
+    '''
+    def preprocess_input(self, x):
+        return x
+
+    def step(self, x, states):
+        prev_output = states[0]
+        B_U = states[1]
+        B_W = states[2]
+
+        h = ternarize_dot(x * B_W, self.W) + self.b
+        output = self.activation(h + ternarize_dot(prev_output * B_U, self.U))
+        return output, [output]
+
+
+# Aliases
+
+TernaryConvolution2D = TernaryConv2D
