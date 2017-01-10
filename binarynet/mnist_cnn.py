@@ -16,7 +16,7 @@ from keras.callbacks import LearningRateScheduler
 from keras.utils import np_utils
 
 from binary_ops import binary_tanh as binary_tanh_op
-from binary_layers import BinaryDense, BinaryConvolution2D
+from binary_layers import BinaryDense, BinaryConv2D
 
 
 def binary_tanh(x):
@@ -71,24 +71,24 @@ Y_test = np_utils.to_categorical(y_test, nb_classes) * 2 - 1
 
 model = Sequential()
 # conv1
-model.add(BinaryConvolution2D(128, 3, 3, input_shape=(nb_channel, img_rows, img_cols),
+model.add(BinaryConv2D(128, 3, 3, input_shape=(nb_channel, img_rows, img_cols),
                               H=H, W_lr_multiplier=W_lr_multiplier, 
                               border_mode='same', bias=bias, name='conv1'))
 model.add(BatchNormalization(epsilon=epsilon, momentum=momentum, axis=1, name='bn1'))
 model.add(Activation(binary_tanh, name='act1'))
 # conv2
-model.add(BinaryConvolution2D(128, 3, 3, H=H, W_lr_multiplier=W_lr_multiplier, 
+model.add(BinaryConv2D(128, 3, 3, H=H, W_lr_multiplier=W_lr_multiplier, 
                               border_mode='same', bias=bias, name='conv2'))
 model.add(MaxPooling2D(pool_size=(2, 2), name='pool2'))
 model.add(BatchNormalization(epsilon=epsilon, momentum=momentum, axis=1, name='bn2'))
 model.add(Activation(binary_tanh, name='act2'))
 # conv3
-model.add(BinaryConvolution2D(256, 3, 3, H=H, W_lr_multiplier=W_lr_multiplier,
+model.add(BinaryConv2D(256, 3, 3, H=H, W_lr_multiplier=W_lr_multiplier,
                               border_mode='same', bias=bias, name='conv3'))
 model.add(BatchNormalization(epsilon=epsilon, momentum=momentum, axis=1, name='bn3'))
 model.add(Activation(binary_tanh, name='act3'))
 # conv4
-model.add(BinaryConvolution2D(256, 3, 3, H=H, W_lr_multiplier=W_lr_multiplier,
+model.add(BinaryConv2D(256, 3, 3, H=H, W_lr_multiplier=W_lr_multiplier,
                               border_mode='same', bias=bias, name='conv4'))
 model.add(MaxPooling2D(pool_size=(2, 2), name='pool4'))
 model.add(BatchNormalization(epsilon=epsilon, momentum=momentum, axis=1, name='bn4'))

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-'''Simple RNN for ATIS slot filling
+'''Simple RNN for Language Model
 '''
 from __future__ import print_function
 import os

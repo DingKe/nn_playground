@@ -1,14 +1,19 @@
 Weight Normalization
 
 ## Run
+
 ### MLP w/ WN on MNIST
 python mnist_mlp.py
+
 ### CNN w/ WN on MNIST
 pyton minist_cnn.py
+
 ### CNN w/ WN on  CIFAR10
 pyton cifar10_cnn.py
+
 ### GRU text generator  w/ WN
 python gru_text_generation.py
+
 ### GRU Language Model
 imdb_lm.py
 > See [this](../gcnn/README.md) how to prepare data.

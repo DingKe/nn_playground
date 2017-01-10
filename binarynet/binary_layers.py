@@ -3,7 +3,7 @@ import numpy as np
 
 from keras import backend as K
 
-from keras.layers import InputSpec, Layer, Dense, Convolution2D
+from keras.layers import InputSpec, Layer, Dense, Conv2D
 from keras import constraints
 from keras import initializations
 
@@ -98,7 +98,7 @@ class BinaryDense(Dense):
         return dict(list(base_config.items()) + list(config.items()))
 
 
-class BinaryConvolution2D(Convolution2D):
+class BinaryConv2D(Conv2D):
     '''Binarized Convolution2D layer
     References: 
     "BinaryNet: Training Deep Neural Networks with Weights and Activations Constrained to +1 or -1" [http://arxiv.org/abs/1602.02830]
@@ -109,7 +109,7 @@ class BinaryConvolution2D(Convolution2D):
         self.W_lr_multiplier = W_lr_multiplier
         self.b_lr_multiplier = b_lr_multiplier
         
-        super(BinaryConvolution2D, self).__init__(nb_filter, nb_row, nb_col, **kwargs)
+        super(BinaryConv2D, self).__init__(nb_filter, nb_row, nb_col, **kwargs)
         
     def build(self, input_shape):
         if self.dim_ordering == 'th':
@@ -183,10 +183,10 @@ class BinaryConvolution2D(Convolution2D):
         config = {'H': self.H,
                   'W_lr_multiplier': self.W_lr_multiplier,
                   'b_lr_multiplier': self.b_lr_multiplier}
-        base_config = super(BinaryConvolution2D, self).get_config()
+        base_config = super(BinaryConv2D, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
 
 
 # Aliases
 
-BinaryConv2D = BinaryConvolution2D
+BinaryConvolution2D = BinaryConv2D 
