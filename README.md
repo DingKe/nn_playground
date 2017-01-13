@@ -21,3 +21,6 @@ Weight Normalization
 
 # layernorm
 Layer Normalization
+
+Note:
+By default, all keras scripts run on tensorflow backend with image_dim_order 'th'.
