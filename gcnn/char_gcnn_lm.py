@@ -9,7 +9,7 @@ from keras.layers import Input, Embedding, Dense, TimeDistributed
 from keras.optimizers import *
 
 from gcnn import GCNN
-from imdb_generator import IMDBLM
+from char_generator import TextLoader
 
 
 def LM(batch_size, window_size=3, vocsize=20000, embed_dim=20, hidden_dim=30, nb_layers=1):
@@ -28,41 +28,32 @@ def LM(batch_size, window_size=3, vocsize=20000, embed_dim=20, hidden_dim=30, nb
     return model
 
 
-def train_model():
-    batch_size = 32 
+def run_demo():
+    batch_size = 50 
     nb_epoch = 100 
     nb_layers = 3
-    vocsize = 2000 # top 2k
-    max_len = 30 
-    train_ratio = 0.99
-    window_size = 3
+
+    max_len = 50 
+    window_size = 5
+    
+    # Prepare data
+    path = './data/tinyshakespeare'
+    data_loader = TextLoader(path, batch_size, max_len)
+    vocsize = data_loader.vocab_size
+    print('vocsize: {}'.format(vocsize))
 
     # Build model
     model = LM(batch_size, window_size=window_size, vocsize=vocsize, nb_layers=nb_layers)
     model.compile(optimizer='adam',
                   loss='sparse_categorical_crossentropy')
 
-    # Prepare data
-    path = './data/imdb-full.pkl'
-    # Train
-    train_gen = IMDBLM(path=path, max_len=max_len, vocab_size=vocsize, shuffle=True,
-                     which_set='train', train_ratio=train_ratio, batch_size=batch_size)
-    # Validation 
-    val_gen = IMDBLM(path=path, max_len=max_len, vocab_size=vocsize,
-                   which_set='validation', train_ratio=train_ratio, batch_size=batch_size)
-
-    train_samples = 20000
-    val_samples = 2000
+    
+    train_samples = data_loader.num_batches * batch_size
 
     # Start training
-    model.summary()
-    model.fit_generator(train_gen(), samples_per_epoch=train_samples, 
-                        validation_data=val_gen(), nb_val_samples=val_samples,
-                        nb_epoch=nb_epoch, verbose=1)
-
-
-def run_demo():
-    train_model()
+    model.summary()   
+    model.fit_generator(data_loader(), samples_per_epoch=train_samples,                         
+                            nb_epoch=nb_epoch, verbose=1)
 
 
 if __name__ == '__main__':
