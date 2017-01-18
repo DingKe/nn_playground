@@ -7,7 +7,12 @@ Only work for tensorflow backend, see [issue 1](https://github.com/DingKe/nn_pla
 change current directory to  data, and follow the instuctions in imdb_preprocess_semi.py.
 
 ## Run
+
+### Word LM
 python imdb_lm_gcnn.py
+
+### Charactor LM
+python char_lm_gcc.py
 
 
 ## References
