@@ -46,7 +46,7 @@ z = Lambda(sampling, output_shape=(m,))([z_mean, z_log_var])
 decoder_h = Dense(hidden_dim, W_regularizer=l2(decay), b_regularizer=l2(decay), bias=bias, activation='tanh')
 decoder_mean = Dense(n, W_regularizer=l2(decay), b_regularizer=l2(decay), bias=bias, activation='sigmoid')
 
-## Dcoder
+## Decoder
 h_decoded = decoder_h(z)
 x_hat = decoder_mean(h_decoded)
 
