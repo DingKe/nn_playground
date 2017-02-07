@@ -12,6 +12,7 @@ K.set_image_dim_ordering('th')
 
 from keras.datasets import mnist
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout, Activation, BatchNormalization
+from keras.layers import Convolution2D, UpSampling2D, LeakyReLU
 from keras.models import Sequential, Model
 from keras.optimizers import RMSprop, Adam
 from keras.utils.generic_utils import Progbar
@@ -32,29 +33,62 @@ def wasserstein(y_true, y_pred):
 
 
 def build_generator(latent_size):
-    model = Sequential()
-    model.add(Dense(1024, input_dim=latent_size, activation='relu'))
-    model.add(Dense(28 * 28, activation='tanh'))
-    model.add(Reshape((1, 28, 28)))
+    cnn = Sequential()
+    cnn.add(Dense(1024, input_dim=latent_size, activation='relu'))
+    cnn.add(Dense(128 * 7 * 7, activation='relu'))
+    cnn.add(Reshape((128, 7, 7)))
 
-    return model 
+    # upsample to (..., 14, 14)
+    cnn.add(UpSampling2D(size=(2, 2)))
+    cnn.add(Convolution2D(256, 5, 5, border_mode='same',
+                          activation='relu', init='glorot_normal'))
+
+    # upsample to (..., 28, 28)
+    cnn.add(UpSampling2D(size=(2, 2)))
+    cnn.add(Convolution2D(128, 5, 5, border_mode='same',
+                          activation='relu', init='glorot_normal'))
+
+    # take a channel axis reduction
+    cnn.add(Convolution2D(1, 2, 2, border_mode='same',
+                          activation='tanh', init='glorot_normal'))
+
+    # this is the z space commonly refered to in GAN papers
+    latent = Input(shape=(latent_size, ))
+
+    fake_image = cnn(latent)
+
+    return Model(input=latent, output=fake_image)
 
 
 def build_critic(c=0.01):
-    f = Sequential()
-    f.add(Flatten(input_shape=(1, 28, 28)))
-    f.add(Dense(256))
-    f.add(Activation('relu'))
-    f.add(Dense(128))
-    f.add(Activation('relu'))
-    f.add(Dense(1, activation='linear'))
+    # build a relatively standard conv net with LeakyReLUs
+    cnn = Sequential()
+
+    cnn.add(Convolution2D(32, 3, 3, border_mode='same', subsample=(2, 2),
+                          input_shape=(1, 28, 28)))
+    cnn.add(LeakyReLU())
+    cnn.add(Dropout(0.3))
+
+    cnn.add(Convolution2D(64, 3, 3, border_mode='same', subsample=(1, 1)))
+    cnn.add(LeakyReLU())
+    cnn.add(Dropout(0.3))
+
+    cnn.add(Convolution2D(128, 3, 3, border_mode='same', subsample=(2, 2)))
+    cnn.add(LeakyReLU())
+    cnn.add(Dropout(0.3))
+
+    cnn.add(Convolution2D(256, 3, 3, border_mode='same', subsample=(1, 1)))
+    cnn.add(LeakyReLU())
+    cnn.add(Dropout(0.3))
+
+    cnn.add(Flatten())
 
     image = Input(shape=(1, 28, 28))
-    score = f(image)
 
-    model = Model(image, score)
+    features = cnn(image)
+    fake = Dense(1, activation='linear', name='critic')(features)
 
-    return model
+    return Model(input=image, output=fake)
 
 
 if __name__ == '__main__':
@@ -151,11 +185,10 @@ if __name__ == '__main__':
         print('\n[Loss_C: {:.3f}, Loss_G: {:.3f}]'.format(np.mean(epoch_critic_loss), np.mean(epoch_gen_loss)))
 
         # save weights every epoch
-        if False:
-            generator.save_weights(
-                'mlp_generator_epoch_{0:03d}.hdf5'.format(epoch), True)
-            critic.save_weights(
-                'mlp_critic_epoch_{0:03d}.hdf5'.format(epoch), True)
+        generator.save_weights(
+            'cnn_generator_epoch_{0:03d}.hdf5'.format(epoch), True)
+        critic.save_weights(
+            'cnn_critic_epoch_{0:03d}.hdf5'.format(epoch), True)
 
         # generate some digits to display
         noise = np.random.uniform(-1, 1, (100, latent_size))
@@ -168,4 +201,4 @@ if __name__ == '__main__':
                                ], axis=-1) * 127.5 + 127.5).astype(np.uint8)
 
         Image.fromarray(img).save(
-            'mlp_epoch_{0:03d}_generated.png'.format(epoch))
+            'cnn_epoch_{0:03d}_generated.png'.format(epoch))
