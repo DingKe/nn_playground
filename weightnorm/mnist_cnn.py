@@ -17,6 +17,8 @@ from keras.layers import Flatten
 from keras.optimizers import SGD, Adam, RMSprop
 from keras.callbacks import LearningRateScheduler
 from keras.utils import np_utils
+import keras.backend as K
+K.set_image_dim_ordering('th')
 
 from weight_norm_layers import *
 

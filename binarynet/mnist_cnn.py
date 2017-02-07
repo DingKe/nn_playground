@@ -7,6 +7,7 @@ from __future__ import print_function
 import numpy as np
 np.random.seed(1337)  # for reproducibility
 
+import keras.backend as K
 from keras.datasets import mnist
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Activation, BatchNormalization, MaxPooling2D
@@ -17,6 +18,8 @@ from keras.utils import np_utils
 
 from binary_ops import binary_tanh as binary_tanh_op
 from binary_layers import BinaryDense, BinaryConv2D
+
+K.set_image_dim_ordering('th')
 
 
 def binary_tanh(x):

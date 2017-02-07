@@ -22,6 +22,8 @@ from keras import backend as K
 
 from layer_norm_layers import *
 
+K.set_image_dim_ordering('th')
+
 batch_size = 128
 nb_classes = 10
 nb_epoch = 12

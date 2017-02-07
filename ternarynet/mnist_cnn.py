@@ -16,6 +16,8 @@ from keras.callbacks import LearningRateScheduler
 from keras.utils import np_utils
 import keras.backend as K
 
+K.set_image_dim_ordering('th')
+
 from ternary_ops import ternarize
 from ternary_layers import TernaryDense, TernaryConv2D
 
