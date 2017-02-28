@@ -22,8 +22,11 @@ Weight Normalization
 # layernorm
 Layer Normalization
 
-# WGAN
+# wgan 
 Wasserstein GAN
+
+# lsgan 
+Least Squares GAN
 
 Note:
 By default, all keras scripts run on tensorflow backend with image_dim_order 'th'.
