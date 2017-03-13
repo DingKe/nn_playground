@@ -112,8 +112,8 @@ if __name__ == '__main__':
             label_batch = y_train[index * batch_size:(index + 1) * batch_size]
 
             X = np.concatenate((image_batch, generated_images))
-            # a = -1, b = 1
-            y = np.array([1] * len(image_batch) + [-1] * batch_size)
+            # a == 0, b == 1
+            y = np.array([1] * len(image_batch) + [0] * batch_size)
 
             epoch_disc_loss.append(disc.train_on_batch(X, y))
 
@@ -122,7 +122,7 @@ if __name__ == '__main__':
             # make new noise. we generate 2 * batch size here such that we have
             # the generator optimize over an identical number of images as the
             noise = np.random.uniform(-1, 1, (batch_size, latent_size))
-            target = np.ones(batch_size) # c == b == 1
+            target = np.ones(batch_size) # c == b == 1, cf. Eq. (9)
             epoch_gen_loss.append(combined.train_on_batch(noise, target))
 
         print('\n[Loss_D: {:.3f}, Loss_G: {:.3f}]'.format(np.mean(epoch_disc_loss), np.mean(epoch_gen_loss)))
