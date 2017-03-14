@@ -28,5 +28,8 @@ Wasserstein GAN
 # lsgan 
 Least Squares GAN
 
+# glsgan
+Generalized Loss Sensitive GAN
+
 Note:
 By default, all keras scripts run on tensorflow backend with image_dim_order 'th'.
