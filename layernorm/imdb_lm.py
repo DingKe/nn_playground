@@ -21,14 +21,14 @@ def LM(batch_size, vocsize=20000, embed_dim=20, hidden_dim=30, nb_layers=1):
     y = LayerNormLSTM(hidden_dim, return_sequences=True, name='lnlstm{}'.format(nb_layers))(y)
     y = TimeDistributed(Dense(vocsize+2, activation='softmax', name='dense{}'.format(nb_layers)))(y)
 
-    model = Model(input=x, output=y)
+    model = Model(inputs=x, outputs=y)
 
     return model
 
 
 def train_model():
     batch_size = 32 
-    nb_epoch = 100 
+    epochs = 100 
 
     vocsize = 2000 # top 2k
     max_len = 30 
@@ -43,19 +43,19 @@ def train_model():
     path = './data/imdb-full.pkl'
     # Train
     train_gen = IMDBLM(path=path, max_len=max_len, vocab_size=vocsize, shuffle=True,
-                     which_set='train', train_ratio=train_ratio, batch_size=batch_size)
+                       which_set='train', train_ratio=train_ratio, batch_size=batch_size)
     # Validation 
     val_gen = IMDBLM(path=path, max_len=max_len, vocab_size=vocsize,
-                   which_set='validation', train_ratio=train_ratio, batch_size=batch_size)
+                     which_set='validation', train_ratio=train_ratio, batch_size=batch_size)
 
-    train_samples = 20000
-    val_samples = 2000
+    train_steps = 2000
+    val_steps = 200
 
     # Start training
     model.summary()
-    model.fit_generator(train_gen(), samples_per_epoch=train_samples, 
-                        validation_data=val_gen(), nb_val_samples=val_samples,
-                        nb_epoch=nb_epoch, verbose=1)
+    model.fit_generator(train_gen(), steps_per_epoch=train_steps, 
+                        validation_data=val_gen(), validation_steps=val_steps,
+                        epochs=epochs, verbose=1)
 
 
 def run_demo():

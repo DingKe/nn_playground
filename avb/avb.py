@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm
 
-from keras.layers import Input, Dense, Lambda, Merge, Activation
+from keras.layers import Input, Dense, Lambda, Activation, Concatenate, Dot
 from keras.models import Model
 from keras.regularizers import l2
 from keras import backend as K
@@ -14,32 +14,32 @@ from keras.optimizers import *
 
 np.random.seed(1111)  # for reproducibility
 
-training = False 
+training = True 
 
 batch_size = 50
 n = 784 # for datapoint
 m = 2 # for hidden variables
 l = 5 # for random noise
 hidden_dim = 256
-nb_epoch = 50
+epochs = 50
 epsilon_std = 1.0
 loss = 'categorical_crossentorpy' # 'mse' or 'categorical_crossentropy'
 
 decay = 1e-4 # weight decay, a.k. l2 regularization
-bias = True
+use_bias = True
 
 ## Encoder
 x = Input(shape=(n,))
 g = Input(shape=(l,))
-x_g = Merge(mode='concat', concat_axis=-1)([x, g]) 
-h_encoded = Dense(hidden_dim, W_regularizer=l2(decay), b_regularizer=l2(decay), bias=bias, activation='relu')(x_g)
-z = Dense(m, activation='relu', W_regularizer=l2(decay), b_regularizer=l2(decay), bias=bias)(h_encoded)
+x_g = Concatenate(-1)([x, g]) 
+h_encoded = Dense(hidden_dim, kernel_regularizer=l2(decay), bias_regularizer=l2(decay), use_bias=use_bias, activation='relu')(x_g)
+z = Dense(m, activation='relu', kernel_regularizer=l2(decay), bias_regularizer=l2(decay), use_bias=use_bias)(h_encoded)
 
 encoder = Model([x, g], z)
 
 ## Decoder
-decoder_h = Dense(hidden_dim, W_regularizer=l2(decay), b_regularizer=l2(decay), bias=bias, activation='relu')
-decoder_mean = Dense(n, W_regularizer=l2(decay), b_regularizer=l2(decay), bias=bias, activation='sigmoid')
+decoder_h = Dense(hidden_dim, kernel_regularizer=l2(decay), bias_regularizer=l2(decay), use_bias=use_bias, activation='relu')
+decoder_mean = Dense(n, kernel_regularizer=l2(decay), bias_regularizer=l2(decay), use_bias=use_bias, activation='sigmoid')
 h_decoded = decoder_h(z)
 x_hat = decoder_mean(h_decoded)
 
@@ -47,13 +47,13 @@ rec = Model([x, g], x_hat)
 rec.compile(optimizer=Adam(1e-3), loss='binary_crossentropy')
 
 ## Discriminator
-x_h = Dense(hidden_dim, W_regularizer=l2(decay), b_regularizer=l2(decay), bias=bias, activation='relu')
-z_h = Dense(hidden_dim, W_regularizer=l2(decay), b_regularizer=l2(decay), bias=bias, activation='relu')
+x_h = Dense(hidden_dim, kernel_regularizer=l2(decay), bias_regularizer=l2(decay), use_bias=use_bias, activation='relu')
+z_h = Dense(hidden_dim, kernel_regularizer=l2(decay), bias_regularizer=l2(decay), use_bias=use_bias, activation='relu')
 
 ### gan_g
 x_h.trainable = False
 z_h.trainable = False
-T = Merge(mode='dot', concat_axis=-1)([x_h(x), z_h(z)])
+T = Dot(-1)([x_h(x), z_h(z)])
 gan_g = Model([x, g], T)
 gan_g.compile(optimizer=Adam(1e-4), loss=lambda y_true, y_predict: -K.mean(y_predict, -1))
 
@@ -62,7 +62,7 @@ x_h.trainable = True
 z_h.trainable = True
 x = Input(shape=(n,))
 z = Input(shape=(m,))
-fake = Merge(mode='dot', concat_axis=-1)([x_h(x), z_h(z)])
+fake = Dot(-1)([x_h(x), z_h(z)])
 fake = Activation('sigmoid')(fake)
 gan_d = Model([x, z], fake)
 gan_d.compile(optimizer=Adam(1e-4), loss='binary_crossentropy')
@@ -77,7 +77,7 @@ if training:
     x_test = x_test.reshape((len(x_test), np.prod(x_test.shape[1:])))
 
     ids = range(len(x_train))
-    for i in range(nb_epoch):
+    for i in range(epochs):
         print('Epoch {}:'.format(i + 1))
         rec_loss = [] 
         gen_loss = [] 
@@ -113,7 +113,7 @@ if training:
 
         print('rec loss: {}, gen loss: {}, dis loss: {}'.\
                format(np.mean(rec_loss), np.mean(gen_loss), np.mean(dis_loss)))
-        vae.save_weights('weights_{}.h5'.format(i))
+        rec.save_weights('weights_{}.h5'.format(i))
 
 # display a 2D manifold of the digits
 n = 15  # figure with 15x15 digits
@@ -128,7 +128,7 @@ z = Input(shape=(m,))
 h_decoded = decoder_h(z)
 x_hat = decoder_mean(h_decoded)
 decoder = Model(z, x_hat)
-decoder.load_weights('weights_5.h5', by_name=True)
+decoder.load_weights('weights_8.h5', by_name=True)
 
 for i, yi in enumerate(grid_x):
     for j, xi in enumerate(grid_y):

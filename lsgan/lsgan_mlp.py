@@ -8,7 +8,7 @@ from PIL import Image
 from six.moves import range
 
 import keras.backend as K
-K.set_image_dim_ordering('th')
+K.set_image_data_format('channels_first')
 
 from keras.datasets import mnist
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout, Activation, BatchNormalization
@@ -48,7 +48,7 @@ def build_discriminator():
 
 if __name__ == '__main__':
 
-    nb_epochs = 5000
+    epochs = 5000
     batch_size = 50
     latent_size = 20
 
@@ -70,7 +70,7 @@ if __name__ == '__main__':
     # we only want to be able to train generation for the combined model
     disc.trainable = False
     fake = disc(fake)
-    combined = Model(input=latent, output=fake)
+    combined = Model(inputs=latent, outputs=fake)
     combined.compile(
         optimizer=Adam(lr=lr),
         loss='mse'
@@ -87,8 +87,8 @@ if __name__ == '__main__':
 
     nb_train, nb_test = X_train.shape[0], X_test.shape[0]
 
-    for epoch in range(nb_epochs):
-        print('Epoch {} of {}'.format(epoch + 1, nb_epochs))
+    for epoch in range(epochs):
+        print('Epoch {} of {}'.format(epoch + 1, epochs))
 
         nb_batches = int(X_train.shape[0] / batch_size)
         progress_bar = Progbar(target=nb_batches)

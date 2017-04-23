@@ -22,10 +22,8 @@ import numpy as np
 np.random.seed(1337)  # for reproducibility
 
 from keras.utils.data_utils import get_file
-from keras.layers.embeddings import Embedding
-from keras.layers import Dense, Merge, Dropout, RepeatVector
-from keras.layers import recurrent
-from keras.models import Sequential
+from keras import layers
+from keras.models import Model
 from keras.preprocessing.sequence import pad_sequences
 
 from layer_norm_layers import *
@@ -97,7 +95,7 @@ def vectorize_stories(data, word_idx, story_maxlen, query_maxlen):
         Y.append(y)
     return pad_sequences(X, maxlen=story_maxlen), pad_sequences(Xq, maxlen=query_maxlen), np.array(Y)
 
-RNN = LayerNormLSTM # LSTM
+RNN = LayerNormLSTM # layers.LSTM
 EMBED_HIDDEN_SIZE = 50
 SENT_HIDDEN_SIZE = 100
 QUERY_HIDDEN_SIZE = 100
@@ -142,29 +140,27 @@ print('story_maxlen, query_maxlen = {}, {}'.format(story_maxlen, query_maxlen))
 
 print('Build model...')
 
-sentrnn = Sequential()
-sentrnn.add(Embedding(vocab_size, EMBED_HIDDEN_SIZE,
-                      input_length=story_maxlen))
-sentrnn.add(Dropout(0.3))
+sentence = layers.Input(shape=(story_maxlen,), dtype='int32')
+encoded_sentence = layers.Embedding(vocab_size, EMBED_HIDDEN_SIZE)(sentence)
+encoded_sentence = layers.Dropout(0.3)(encoded_sentence)
 
-qrnn = Sequential()
-qrnn.add(Embedding(vocab_size, EMBED_HIDDEN_SIZE,
-                   input_length=query_maxlen))
-qrnn.add(Dropout(0.3))
-qrnn.add(RNN(EMBED_HIDDEN_SIZE, return_sequences=False))
-qrnn.add(RepeatVector(story_maxlen))
+question = layers.Input(shape=(query_maxlen,), dtype='int32')
+encoded_question = layers.Embedding(vocab_size, EMBED_HIDDEN_SIZE)(question)
+encoded_question = layers.Dropout(0.3)(encoded_question)
+encoded_question = RNN(EMBED_HIDDEN_SIZE)(encoded_question)
+encoded_question = layers.RepeatVector(story_maxlen)(encoded_question)
 
-model = Sequential()
-model.add(Merge([sentrnn, qrnn], mode='sum'))
-model.add(RNN(EMBED_HIDDEN_SIZE, return_sequences=False))
-model.add(Dropout(0.3))
-model.add(Dense(vocab_size, activation='softmax'))
+merged = layers.add([encoded_sentence, encoded_question])
+merged = RNN(EMBED_HIDDEN_SIZE)(merged)
+merged = layers.Dropout(0.3)(merged)
+preds = layers.Dense(vocab_size, activation='softmax')(merged)
 
+model = Model([sentence, question], preds)
 model.compile(optimizer='rmsprop',
               loss='categorical_crossentropy',
               metrics=['accuracy'])
 
 print('Training')
-model.fit([X, Xq], Y, batch_size=BATCH_SIZE, nb_epoch=EPOCHS, validation_split=0.05)
+model.fit([X, Xq], Y, batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.05)
 loss, acc = model.evaluate([tX, tXq], tY, batch_size=BATCH_SIZE)
 print('Test loss / test accuracy = {:.4f} / {:.4f}'.format(loss, acc))

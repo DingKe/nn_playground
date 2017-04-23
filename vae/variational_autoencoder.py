@@ -19,32 +19,32 @@ batch_size = 100
 n = 784
 m = 2
 hidden_dim = 256
-nb_epoch = 50
+epochs = 50
 epsilon_std = 1.0
 use_loss = 'xent' # 'mse' or 'xent'
 
 decay = 1e-4 # weight decay, a.k. l2 regularization
-bias = True
+use_bias = True
 
 ## Encoder
 x = Input(batch_shape=(batch_size, n))
-h_encoded = Dense(hidden_dim, W_regularizer=l2(decay), b_regularizer=l2(decay), bias=bias, activation='tanh')(x)
-z_mean = Dense(m, W_regularizer=l2(decay), b_regularizer=l2(decay), bias=bias)(h_encoded)
-z_log_var = Dense(m, W_regularizer=l2(decay), b_regularizer=l2(decay), bias=bias)(h_encoded)
+h_encoded = Dense(hidden_dim, kernel_regularizer=l2(decay), bias_regularizer=l2(decay), use_bias=use_bias, activation='tanh')(x)
+z_mean = Dense(m, kernel_regularizer=l2(decay), bias_regularizer=l2(decay), use_bias=use_bias)(h_encoded)
+z_log_var = Dense(m, kernel_regularizer=l2(decay), bias_regularizer=l2(decay), use_bias=use_bias)(h_encoded)
 
 
 ## Sampler
 def sampling(args):
     z_mean, z_log_var = args
-    epsilon = K.random_normal(shape=(batch_size, m), mean=0.,
-                              std=epsilon_std)
+    epsilon = K.random_normal_variable(shape=(batch_size, m), mean=0.,
+                                       scale=epsilon_std)
     return z_mean + K.exp(z_log_var / 2) * epsilon
 
 z = Lambda(sampling, output_shape=(m,))([z_mean, z_log_var])
 
 # we instantiate these layers separately so as to reuse them later
-decoder_h = Dense(hidden_dim, W_regularizer=l2(decay), b_regularizer=l2(decay), bias=bias, activation='tanh')
-decoder_mean = Dense(n, W_regularizer=l2(decay), b_regularizer=l2(decay), bias=bias, activation='sigmoid')
+decoder_h = Dense(hidden_dim, kernel_regularizer=l2(decay), bias_regularizer=l2(decay), use_bias=use_bias, activation='tanh')
+decoder_mean = Dense(n, kernel_regularizer=l2(decay), bias_regularizer=l2(decay), use_bias=use_bias, activation='sigmoid')
 
 ## Decoder
 h_decoded = decoder_h(z)
@@ -76,7 +76,7 @@ x_test = x_test.reshape((len(x_test), np.prod(x_test.shape[1:])))
 
 vae.fit(x_train, x_train,
         shuffle=True,
-        nb_epoch=nb_epoch,
+        epochs=epochs,
         batch_size=batch_size,
         validation_data=(x_test, x_test))
 

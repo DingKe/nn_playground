@@ -23,14 +23,14 @@ def LM(batch_size, window_size=3, vocsize=20000, embed_dim=20, hidden_dim=30, nb
              name='gcnn{}'.format(nb_layers))(y)
     y = TimeDistributed(Dense(vocsize+2, activation='softmax', name='dense{}'.format(nb_layers)))(y)
 
-    model = Model(input=x, output=y)
+    model = Model(inputs=x, outputs=y)
 
     return model
 
 
 def run_demo():
     batch_size = 50 
-    nb_epoch = 100 
+    epochs = 100 
     nb_layers = 3
 
     max_len = 50 
@@ -48,12 +48,12 @@ def run_demo():
                   loss='sparse_categorical_crossentropy')
 
     
-    train_samples = data_loader.num_batches * batch_size
+    train_steps = data_loader.num_batches
 
     # Start training
     model.summary()   
-    model.fit_generator(data_loader(), samples_per_epoch=train_samples,                         
-                            nb_epoch=nb_epoch, verbose=1)
+    model.fit_generator(data_loader(), steps_per_epoch=train_steps,                         
+                        epochs=epochs, verbose=1)
 
 
 if __name__ == '__main__':

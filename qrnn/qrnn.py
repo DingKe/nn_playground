@@ -3,10 +3,10 @@ from __future__ import absolute_import
 import numpy as np
 
 from keras import backend as K
-from keras import activations, initializations, regularizers, constraints
+from keras import activations, initializers, regularizers, constraints
 from keras.layers import Layer, InputSpec
 
-from keras.utils.np_utils import conv_output_length
+from keras.utils.conv_utils import conv_output_length
 
 import theano
 import theano.tensor as T
@@ -22,43 +22,40 @@ class QRNN(Layer):
     '''Qausi RNN
 
     # Arguments
-        output_dim: dimension of the internal projections and the final output.
+        units: dimension of the internal projections and the final output.
 
     # References
         - [Qausi-recurrent Neural Networks](http://arxiv.org/abs/1611.01576)
     '''
-    def __init__(self, output_dim, window_size=2,
-                 return_sequences=False, go_backwards=False, stateful=False,
-                 unroll=False, subsample_length=1,
-                 init='uniform', activation='tanh',
-                 W_regularizer=None, b_regularizer=None,
-                 W_constraint=None, b_constraint=None, 
-                 dropout=0, weights=None,
-                 bias=True, input_dim=None, input_length=None,
+    def __init__(self, units, window_size=2, stride=1,
+                 return_sequences=False, go_backwards=False, 
+                 stateful=False, unroll=False, activation='tanh',
+                 kernel_initializer='uniform', bias_initializer='zero',
+                 kernel_regularizer=None, bias_regularizer=None,
+                 activity_regularizer=None,
+                 kernel_constraint=None, bias_constraint=None, 
+                 dropout=0, use_bias=True, input_dim=None, input_length=None,
                  **kwargs):
         self.return_sequences = return_sequences
         self.go_backwards = go_backwards
         self.stateful = stateful
         self.unroll = unroll
 
-        self.output_dim = output_dim
+        self.units = units 
         self.window_size = window_size
-        self.subsample = (subsample_length, 1)
+        self.strides = (stride, 1)
 
-        self.bias = bias
-        self.init = initializations.get(init)
+        self.use_bias = use_bias
         self.activation = activations.get(activation)
-        self.W_regularizer = regularizers.get(W_regularizer)
-        self.b_regularizer = regularizers.get(b_regularizer)
-
-        self.W_constraint = constraints.get(W_constraint)
-        self.b_constraint = constraints.get(b_constraint)
+        self.kernel_initializer = initializers.get(kernel_initializer)
+        self.bias_initializer = initializers.get(bias_initializer)
+        self.kernel_regularizer = regularizers.get(kernel_regularizer)
+        self.bias_regularizer = regularizers.get(bias_regularizer)
+        self.activity_regularizer = regularizers.get(activity_regularizer)
+        self.kernel_constraint = constraints.get(kernel_constraint)
+        self.bias_constraint = constraints.get(bias_constraint)
 
         self.dropout = dropout
-        if self.dropout is not None and 0. < self.dropout < 1.:
-            self.uses_learning_phase = True
-        self.initial_weights = weights
-
         self.supports_masking = True
         self.input_spec = [InputSpec(ndim=3)]
         self.input_dim = input_dim
@@ -68,126 +65,224 @@ class QRNN(Layer):
         super(QRNN, self).__init__(**kwargs)
 
     def build(self, input_shape):
+        if isinstance(input_shape, list):
+            input_shape = input_shape[0]
+
+        batch_size = input_shape[0] if self.stateful else None
+        self.input_dim = input_shape[2]
+        self.input_spec = InputSpec(shape=(batch_size, None, self.input_dim))
+        self.state_spec = InputSpec(shape=(batch_size, self.units))
+
+        self.states = [None]
         if self.stateful:
             self.reset_states()
-        else:
-            # initial states: all-zero tensor of shape (output_dim)
-            self.states = [None]
 
-        input_dim = input_shape[2]
-        self.input_spec = [InputSpec(shape=input_shape)]
-        self.W_shape = (self.window_size, 1, input_dim, self.output_dim * 3)
+        kernel_shape = (self.window_size, 1, self.input_dim, self.units * 3)
+        self.kernel = self.add_weight(name='kernel',
+                                      shape=kernel_shape,
+                                      initializer=self.kernel_initializer,
+                                      regularizer=self.kernel_regularizer,
+                                      constraint=self.kernel_constraint)
+        if self.use_bias:
+            self.bias = self.add_weight(name='bias', 
+                                        shape=(self.units * 3,),
+                                        initializer=self.bias_initializer,
+                                        regularizer=self.bias_regularizer,
+                                        constraint=self.bias_constraint)
 
-        self.W = self.add_weight(self.W_shape,
-                                 initializer=self.init,
-                                 name='{}_W'.format(self.name),
-                                 regularizer=self.W_regularizer,
-                                 constraint=self.W_constraint)
-        if self.bias:
-            self.b = self.add_weight((self.output_dim * 3,),
-                                     initializer='zero',
-                                     name='{}_b'.format(self.name),
-                                     regularizer=self.b_regularizer,
-                                     constraint=self.b_constraint)
+        self.built = True
 
-        if self.initial_weights is not None:
-            self.set_weights(self.initial_weights)
-            del self.initial_weights
+    def compute_output_shape(self, input_shape):
+        if isinstance(input_shape, list):
+            input_shape = input_shape[0]
 
-    def get_output_shape_for(self, input_shape):
         length = input_shape[1]
         if length:
             length = conv_output_length(length + self.window_size - 1,
-                                        self.window_size,
-                                        'valid',
-                                        self.subsample[0])
+                                        self.window_size, 'valid',
+                                        self.strides[0])
         if self.return_sequences:
-            return (input_shape[0], length, self.output_dim)
+            return (input_shape[0], length, self.units)
         else:
-            return (input_shape[0], self.output_dim)
+            return (input_shape[0], self.units)
 
-    def compute_mask(self, input, mask):
+    def compute_mask(self, inputs, mask):
         if self.return_sequences:
             return mask
         else:
             return None
 
-    def get_initial_states(self, x):
-        # build an all-zero tensor of shape (samples, output_dim)
-        initial_state = K.zeros_like(x)  # (samples, timesteps, input_dim)
+    def get_initial_states(self, inputs):
+        # build an all-zero tensor of shape (samples, units)
+        initial_state = K.zeros_like(inputs)  # (samples, timesteps, input_dim)
         initial_state = K.sum(initial_state, axis=(1, 2))  # (samples,)
         initial_state = K.expand_dims(initial_state)  # (samples, 1)
-        initial_state = K.tile(initial_state, [1, self.output_dim])  # (samples, output_dim)
+        initial_state = K.tile(initial_state, [1, self.units])  # (samples, units)
         initial_states = [initial_state for _ in range(len(self.states))]
         return initial_states
 
     def reset_states(self):
-        assert self.stateful, 'Layer must be stateful.'
-        input_shape = self.input_spec[0].shape
-        if not input_shape[0]:
-            raise Exception('If a RNN is stateful, a complete ' +
-                            'input_shape must be provided (including batch size).')
-        if hasattr(self, 'states'):
-            K.set_value(self.states[0],
-                        np.zeros((input_shape[0], self.output_dim)))
-        else:
-            self.states = [K.zeros((input_shape[0], self.output_dim))]
+        if not self.stateful:
+            raise AttributeError('Layer must be stateful.')
+        if not self.input_spec:
+            raise RuntimeError('Layer has never been called '
+                               'and thus has no states.')
 
-    def call(self, x, mask=None):
-        # input shape: (nb_samples, time (padded with zeros), input_dim)
+        batch_size = self.input_spec.shape[0]
+        if not batch_size:
+            raise ValueError('If a QRNN is stateful, it needs to know '
+                             'its batch size. Specify the batch size '
+                             'of your input tensors: \n'
+                             '- If using a Sequential model, '
+                             'specify the batch size by passing '
+                             'a `batch_input_shape` '
+                             'argument to your first layer.\n'
+                             '- If using the functional API, specify '
+                             'the time dimension by passing a '
+                             '`batch_shape` argument to your Input layer.')
+        if states_value is not None:
+            if not isinstance(states_value, (list, tuple)):
+                states_value = [states_value]
+            if len(states_value) != len(self.states):
+                raise ValueError('The layer has ' + str(len(self.states)) +
+                                 ' states, but the `states_value` '
+                                 'argument passed '
+                                 'only has ' + str(len(states_value)) +
+                                 ' entries')
+        if self.states[0] is None:
+            self.states = [K.zeros((batch_size, self.units))
+                           for _ in self.states]
+            if not states_value:
+                return
+        for i, state in enumerate(self.states):
+            if states_value:
+                value = states_value[i]
+                if value.shape != (batch_size, self.units):
+                    raise ValueError(
+                        'Expected state #' + str(i) +
+                        ' to have shape ' + str((batch_size, self.units)) +
+                        ' but got array with shape ' + str(value.shape))
+            else:
+                value = np.zeros((batch_size, self.units))
+            K.set_value(state, value)
+
+    def __call__(self, inputs, initial_state=None, **kwargs):
+        # If `initial_state` is specified,
+        # and if it a Keras tensor,
+        # then add it to the inputs and temporarily
+        # modify the input spec to include the state.
+        if initial_state is not None:
+            if hasattr(initial_state, '_keras_history'):
+                # Compute the full input spec, including state
+                input_spec = self.input_spec
+                state_spec = self.state_spec
+                if not isinstance(state_spec, list):
+                    state_spec = [state_spec]
+                self.input_spec = [input_spec] + state_spec
+
+                # Compute the full inputs, including state
+                if not isinstance(initial_state, (list, tuple)):
+                    initial_state = [initial_state]
+                inputs = [inputs] + list(initial_state)
+
+                # Perform the call
+                output = super(QRNN, self).__call__(inputs, **kwargs)
+
+                # Restore original input spec
+                self.input_spec = input_spec
+                return output
+            else:
+                kwargs['initial_state'] = initial_state
+        return super(QRNN, self).__call__(inputs, **kwargs)
+
+    def call(self, inputs, mask=None, initial_state=None, training=None):
+        # input shape: `(samples, time (padded with zeros), input_dim)`
         # note that the .build() method of subclasses MUST define
-        # self.input_spec with a complete input shape.
-        input_shape = self.input_spec[0].shape
-        if self.stateful:
+        # self.input_spec and self.state_spec with complete input shapes.
+        if initial_state is not None:
+            if not isinstance(initial_state, (list, tuple)):
+                initial_states = [initial_state]
+            else:
+                initial_states = list(initial_state)
+        if isinstance(inputs, list):
+            initial_states = inputs[1:]
+            inputs = inputs[0]
+        elif self.stateful:
             initial_states = self.states
         else:
-            initial_states = self.get_initial_states(x)
-        constants = self.get_constants(x)
-        preprocessed_input = self.preprocess_input(x)
+            initial_states = self.get_initial_states(inputs)
+
+        if len(initial_states) != len(self.states):
+            raise ValueError('Layer has ' + str(len(self.states)) +
+                             ' states but was passed ' +
+                             str(len(initial_states)) +
+                             ' initial states.')
+        input_shape = K.int_shape(inputs)
+        if self.unroll and input_shape[1] is None:
+            raise ValueError('Cannot unroll a RNN if the '
+                             'time dimension is undefined. \n'
+                             '- If using a Sequential model, '
+                             'specify the time dimension by passing '
+                             'an `input_shape` or `batch_input_shape` '
+                             'argument to your first layer. If your '
+                             'first layer is an Embedding, you can '
+                             'also use the `input_length` argument.\n'
+                             '- If using the functional API, specify '
+                             'the time dimension by passing a `shape` '
+                             'or `batch_shape` argument to your Input layer.')
+        constants = self.get_constants(inputs, training=None)
+        preprocessed_input = self.preprocess_input(inputs, training=None)
 
         last_output, outputs, states = K.rnn(self.step, preprocessed_input,
                                             initial_states,
                                             go_backwards=self.go_backwards,
                                             mask=mask,
-                                            constants=constants)
+                                            constants=constants,
+                                            unroll=self.unroll,
+                                            input_length=input_shape[1])
         if self.stateful:
-            self.updates = []
+            updates = []
             for i in range(len(states)):
-                self.updates.append((self.states[i], states[i]))
+                updates.append((self.states[i], states[i]))
+            self.add_update(updates, inputs)
+
+        # Properly set learning phase
+        if 0 < self.dropout < 1:
+            last_output._uses_learning_phase = True
+            outputs._uses_learning_phase = True
 
         if self.return_sequences:
             return outputs
         else:
             return last_output
 
-    def preprocess_input(self, x):
+    def preprocess_input(self, inputs, training=None):
         if self.window_size > 1:
-            x = K.asymmetric_temporal_padding(x, self.window_size-1, 0)
-        x = K.expand_dims(x, 2)  # add a dummy dimension
+            inputs = K.temporal_padding(inputs, (self.window_size-1, 0))
+        inputs = K.expand_dims(inputs, 2)  # add a dummy dimension
 
-        output = K.conv2d(x, self.W, strides=self.subsample,
-                          border_mode='valid',
-                          dim_ordering='tf')
+        output = K.conv2d(inputs, self.kernel, strides=self.strides,
+                          padding='valid',
+                          data_format='channels_last')
         output = K.squeeze(output, 2)  # remove the dummy dimension
-        if self.bias:
-            output += K.reshape(self.b, (1, 1, self.output_dim * 3))
+        if self.use_bias:
+            ouput = K.bias_add(output, self.bias, data_format='channels_last')
 
         if self.dropout is not None and 0. < self.dropout < 1.:
-            z = output[:, :, :self.output_dim]
-            f = output[:, :, self.output_dim:2 * self.output_dim]
-            o = output[:, :, 2 * self.output_dim:]
-            f = K.in_train_phase(1 - _dropout(1 - f, self.dropout), f)
+            z = output[:, :, :self.units]
+            f = output[:, :, self.units:2 * self.units]
+            o = output[:, :, 2 * self.units:]
+            f = K.in_train_phase(1 - _dropout(1 - f, self.dropout), f, training=training)
             return K.concatenate([z, f, o], -1)
         else:
             return output
 
-
-    def step(self, input, states):
+    def step(self, inputs, states):
         prev_output = states[0]
 
-        z = input[:, :self.output_dim]
-        f = input[:, self.output_dim:2 * self.output_dim]
-        o = input[:, 2 * self.output_dim:]
+        z = inputs[:, :self.units]
+        f = inputs[:, self.units:2 * self.units]
+        o = inputs[:, 2 * self.units:]
 
         z = self.activation(z)
         f = f if self.dropout is not None and 0. < self.dropout < 1. else K.sigmoid(f)
@@ -198,21 +293,27 @@ class QRNN(Layer):
 
         return output, [output]
 
-    def get_constants(self, x):
-        constants = []
-        return constants
-
+    def get_constants(self, inputs, training=None):
+        return []
+ 
     def get_config(self):
-        config = {'output_dim': self.output_dim,
-                  'init': self.init.__name__,
+        config = {'units': self.units,
                   'window_size': self.window_size,
-                  'subsample_length': self.subsample[0],
-                  'activation': self.activation.__name__,
-                  'W_regularizer': self.W_regularizer.get_config() if self.W_regularizer else None,
-                  'b_regularizer': self.b_regularizer.get_config() if self.b_regularizer else None,
-                  'W_constraint': self.W_constraint.get_config() if self.W_constraint else None,
-                  'b_constraint': self.b_constraint.get_config() if self.b_constraint else None,
-                  'bias': self.bias,
+                  'stride': self.strides[0],
+                  'return_sequences': self.return_sequences,
+                  'go_backwards': self.go_backwards,
+                  'stateful': self.stateful,
+                  'unroll': self.unroll,
+                  'use_bias': self.use_bias,
+                  'dropout': self.dropout,
+                  'activation': activations.serialize(self.activation),
+                  'kernel_initializer': initializers.serialize(self.kernel_initializer),
+                  'bias_initializer': initializers.serialize(self.bias_initializer),
+                  'kernel_regularizer': regularizers.serialize(self.kernel_regularizer),
+                  'bias_regularizer': regularizers.serialize(self.bias_regularizer),
+                  'activity_regularizer': regularizers.serialize(self.activy_regularizer),
+                  'kernel_constraint': constraints.serialize(self.kernel_constraint),
+                  'bias_constraint': constraints.serialize(self.bias_constraint),
                   'input_dim': self.input_dim,
                   'input_length': self.input_length}
         base_config = super(QRNN, self).get_config()

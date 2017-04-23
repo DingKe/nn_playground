@@ -8,11 +8,11 @@ from PIL import Image
 from six.moves import range
 
 import keras.backend as K
-K.set_image_dim_ordering('th')
+K.set_image_data_format('channels_first')
 
 from keras.datasets import mnist
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout, Activation, BatchNormalization
-from keras.layers import Convolution2D, UpSampling2D, LeakyReLU
+from keras.layers import Conv2D, UpSampling2D, LeakyReLU
 from keras.models import Sequential, Model
 from keras.optimizers import RMSprop, Adam
 from keras.utils.generic_utils import Progbar
@@ -40,44 +40,44 @@ def build_generator(latent_size):
 
     # upsample to (..., 14, 14)
     cnn.add(UpSampling2D(size=(2, 2)))
-    cnn.add(Convolution2D(256, 5, 5, border_mode='same',
-                          activation='relu', init='glorot_normal'))
+    cnn.add(Conv2D(256, 5, padding='same',
+                   activation='relu', kernel_initializer='glorot_normal'))
 
     # upsample to (..., 28, 28)
     cnn.add(UpSampling2D(size=(2, 2)))
-    cnn.add(Convolution2D(128, 5, 5, border_mode='same',
-                          activation='relu', init='glorot_normal'))
+    cnn.add(Conv2D(128, 5, padding='same',
+                   activation='relu', kernel_initializer='glorot_normal'))
 
     # take a channel axis reduction
-    cnn.add(Convolution2D(1, 2, 2, border_mode='same',
-                          activation='tanh', init='glorot_normal'))
+    cnn.add(Conv2D(1, 2, padding='same',
+                   activation='tanh', kernel_initializer='glorot_normal'))
 
     # this is the z space commonly refered to in GAN papers
-    latent = Input(shape=(latent_size, ))
+    latent = Input(shape=(latent_size,))
 
     fake_image = cnn(latent)
 
-    return Model(input=latent, output=fake_image)
+    return Model(inputs=latent, outputs=fake_image)
 
 
 def build_critic(c=0.01):
     # build a relatively standard conv net with LeakyReLUs
     cnn = Sequential()
 
-    cnn.add(Convolution2D(32, 3, 3, border_mode='same', subsample=(2, 2),
-                          input_shape=(1, 28, 28)))
+    cnn.add(Conv2D(32, 3, padding='same', strides=(2, 2),
+                   input_shape=(1, 28, 28)))
     cnn.add(LeakyReLU())
     cnn.add(Dropout(0.3))
 
-    cnn.add(Convolution2D(64, 3, 3, border_mode='same', subsample=(1, 1)))
+    cnn.add(Conv2D(64, 3, padding='same', strides=(1, 1)))
     cnn.add(LeakyReLU())
     cnn.add(Dropout(0.3))
 
-    cnn.add(Convolution2D(128, 3, 3, border_mode='same', subsample=(2, 2)))
+    cnn.add(Conv2D(128, 3, padding='same', strides=(2, 2)))
     cnn.add(LeakyReLU())
     cnn.add(Dropout(0.3))
 
-    cnn.add(Convolution2D(256, 3, 3, border_mode='same', subsample=(1, 1)))
+    cnn.add(Conv2D(256, 3, padding='same', strides=(1, 1)))
     cnn.add(LeakyReLU())
     cnn.add(Dropout(0.3))
 
@@ -88,12 +88,12 @@ def build_critic(c=0.01):
     features = cnn(image)
     fake = Dense(1, activation='linear', name='critic')(features)
 
-    return Model(input=image, output=fake)
+    return Model(inputs=image, outputs=fake)
 
 
 if __name__ == '__main__':
 
-    nb_epochs = 5000
+    epochs = 5000
     batch_size = 50
     latent_size = 20
 
@@ -116,7 +116,7 @@ if __name__ == '__main__':
     # we only want to be able to train generation for the combined model
     critic.trainable = False
     fake = critic(fake)
-    combined = Model(input=latent, output=fake)
+    combined = Model(inputs=latent, outputs=fake)
     combined.compile(
         optimizer=Adam(lr=lr),
         loss=wasserstein
@@ -133,8 +133,8 @@ if __name__ == '__main__':
 
     nb_train, nb_test = X_train.shape[0], X_test.shape[0]
 
-    for epoch in range(nb_epochs):
-        print('Epoch {} of {}'.format(epoch + 1, nb_epochs))
+    for epoch in range(epochs):
+        print('Epoch {} of {}'.format(epoch + 1, epochs))
 
         nb_batches = int(X_train.shape[0] / batch_size)
         progress_bar = Progbar(target=nb_batches)
