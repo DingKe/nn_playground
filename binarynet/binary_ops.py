@@ -57,3 +57,14 @@ def binarize(W, H=1):
     # [-H, H] -> -H or H
     Wb = H * binary_tanh(W / H)
     return Wb
+
+
+def _mean_abs(x, axis=None, keepdims=False):
+    return K.stop_gradient(K.mean(K.abs(x), axis=axis, keepdims=keepdims))
+
+    
+def xnorize(W, H=1., axis=None, keepdims=False):
+    Wb = binarize(W, H)
+    Wa = _mean_abs(W, axis, keepdims)
+    
+    return Wa, Wb

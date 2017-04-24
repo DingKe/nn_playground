@@ -6,7 +6,7 @@ import keras.backend as K
 def switch(condition, t, e):
     if K.backend() == 'tensorflow':
         import tensorflow as tf
-        return tf.select(condition, t, e) # TODO use tf.where  instead
+        return tf.where(condition, t, e)
     elif K.backend() == 'theano':
         import theano.tensor as tt
         return tt.switch(condition, t, e)

@@ -23,12 +23,13 @@ from ternary_layers import TernaryDense
 class DropoutNoScale(Dropout):
     '''Keras Dropout does scale the input in training phase, which is undesirable here.
     '''
-    def call(self, x, mask=None):
-        if 0. < self.p < 1.:
-            noise_shape = self._get_noise_shape(x)
-            x = K.in_train_phase(K.dropout(x, self.p, noise_shape) * (1. - self.p), # multiplied by (1. - self.p) for compensation
-                                 x)
-        return x
+    def call(self, inputs, mask=None):
+        if 0. < self.rate < 1.:
+            noise_shape = self._get_noise_shape(inputs)
+            inputs = K.in_train_phase(
+                        K.dropout(inputs, self.rate, noise_shape) * (1. - self.rate), 
+                        inputs)# multiplied by (1. - self.rate) for compensation
+        return inputs 
 
 
 def ternary_tanh(x):
@@ -37,21 +38,21 @@ def ternary_tanh(x):
 
 
 batch_size = 100
-nb_epoch = 20
+epochs = 20
 nb_classes = 10
 
 H = 'Glorot'
-W_lr_multiplier = 'Glorot'
+kernel_lr_multiplier = 'Glorot'
 
 # network
 num_unit = 2048
 num_hidden = 3
-bias = False
+use_bias = False
 
 # learning rate schedule
 lr_start = 1e-3
 lr_end = 1e-4
-lr_decay = (lr_end / lr_start)**(1. / nb_epoch)
+lr_decay = (lr_end / lr_start)**(1. / epochs)
 
 # BN
 epsilon = 1e-6
@@ -80,12 +81,12 @@ Y_test = np_utils.to_categorical(y_test, nb_classes) * 2 - 1
 model = Sequential()
 model.add(DropoutNoScale(drop_in, input_shape=(784,), name='drop0'))
 for i in range(num_hidden):
-    model.add(TernaryDense(num_unit, H=H, W_lr_multiplier=W_lr_multiplier, bias=bias,
+    model.add(TernaryDense(num_unit, H=H, kernel_lr_multiplier=kernel_lr_multiplier, use_bias=use_bias,
               name='dense{}'.format(i+1)))
     model.add(BatchNormalization(epsilon=epsilon, momentum=momentum, name='bn{}'.format(i+1)))
     model.add(Activation(ternary_tanh, name='act{}'.format(i+1)))
     model.add(DropoutNoScale(drop_hidden, name='drop{}'.format(i+1)))
-model.add(TernaryDense(10, H=H, W_lr_multiplier=W_lr_multiplier, bias=bias,
+model.add(TernaryDense(10, H=H, kernel_lr_multiplier=kernel_lr_multiplier, use_bias=use_bias,
           name='dense'))
 model.add(BatchNormalization(epsilon=epsilon, momentum=momentum, name='bn'))
 
@@ -96,7 +97,7 @@ model.compile(loss='squared_hinge', optimizer=opt, metrics=['acc'])
 
 lr_scheduler = LearningRateScheduler(lambda e: lr_start * lr_decay ** e)
 history = model.fit(X_train, Y_train,
-                    batch_size=batch_size, nb_epoch=nb_epoch,
+                    batch_size=batch_size, epochs=epochs,
                     verbose=1, validation_data=(X_test, Y_test),
                     callbacks=[lr_scheduler])
 score = model.evaluate(X_test, Y_test, verbose=0)

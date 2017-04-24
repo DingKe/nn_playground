@@ -3,7 +3,7 @@ import numpy as np
 from keras import backend as K
 from binary_ops import xnorize
 
-from binary_layers import BinaryDense, BinaryConvolution2D
+from binary_layers import BinaryDense, BinaryConv2D
 
 
 class XnorDense(BinaryDense):
@@ -11,71 +11,63 @@ class XnorDense(BinaryDense):
     References: 
     - [XNOR-Net: ImageNet Classification Using Binary Convolutional Neural Networks](http://arxiv.org/abs/1603.05279)
     '''
-    def call(self, x, mask=None):
-        xa, xb = xnorize(x, 1., axis=1, keepdims=True) # (nb_sample, 1)
-        Wa, Wb = xnorize(self.W, self.H, axis=0, keepdims=True) # (1, output_dim)
-        out = K.dot(xb, Wb) * Wa * xa
-        if self.bias:
-            out += self.b
-        out = self.activation(out)
-            
-        return out
+    def call(self, inputs, mask=None):
+        inputs_a, inputs_b = xnorize(inputs, 1., axis=1, keepdims=True) # (nb_sample, 1)
+        kernel_a, kernel_b = xnorize(self.kernel, self.H, axis=0, keepdims=True) # (1, units)
+        output = K.dot(inputs_b, kernel_b) * kernel_a * inputs_a
+        if self.use_bias:
+            output = K.bias_add(output, self.bias)
+        if self.activation is not None:
+            output = self.activation(output)
+        return output
 
 
-class XnorConvolution2D(BinaryConvolution2D):
+class XnorConv2D(BinaryConv2D):
     '''XNOR Conv2D layer
     References: 
     - [XNOR-Net: ImageNet Classification Using Binary Convolutional Neural Networks](http://arxiv.org/abs/1603.05279)
     '''
-    def call(self, x, mask=None):
-        _, Wb = xnorize(self.W, self.H)
-        _, xb = xnorize(x)
-        conv_out = K.conv2d(xb, Wb, strides=self.subsample,
-                            border_mode=self.border_mode,
-                            dim_ordering=self.dim_ordering,
-                            filter_shape=self.W_shape)
-                            
-        if self.dim_ordering == 'th':
-            # calculate Wa and xa
-            
-            # Wa
-            mask = K.reshape(self.W, (self.nb_filter, -1)) # nb_filter, stack_size * self.nb_row * self.nb_col
-            Wa = K.stop_gradient(K.mean(K.abs(mask), axis=1)) # nb_filter
-            
-            # xa
-            mask = K.permute_dimensions(x, (0, 2, 3, 1)) # nb_sample, nb_row, nb_col, stack_size
-            mask = K.mean(K.abs(mask), axis=-1, keepdims=True) # nb_sample, nb_row, nb_col, 1
-            mask = K.permute_dimensions(mask, (0, 3, 1, 2)) # nb_sample, 1, nb_row, nb_col
-            xa = K.conv2d(mask, K.ones((1, 1, self.nb_row, self.nb_col)), strides=self.subsample,
-                        border_mode=self.border_mode,
-                        dim_ordering=self.dim_ordering) # nb_sample, 1, new_nb_row, new_nb_col
-            conv_out = conv_out * K.stop_gradient(xa) * K.expand_dims(K.expand_dims(K.expand_dims(Wa, 0), -1), -1)
-        elif self.dim_ordering == 'tf':
-            # calculate xa
-            
-            # Wa
-            mask = K.reshape(self.W, (-1, self.nb_filter)) # stack_size * self.nb_row * self.nb_col, nb_filter
-            Wa = K.stop_gradient(K.mean(K.abs(mask), axis=0)) # nb_filter
-            
-            # xa
-            mask = K.mean(K.abs(mask), axis=-1, keepdims=True) # nb_sample, nb_row, nb_col, 1
-            xa = K.conv2d(mask, K.ones((self.nb_row, self.nb_col, 1, 1)), strides=self.subsample,
-                        border_mode=self.border_mode,
-                        dim_ordering=self.dim_ordering) # nb_sample, new_nb_row, new_nb_col, 1
-            conv_out = conv_out * K.stop_gradient(xa) * K.expand_dims(K.expand_dims(K.expand_dims(Wa, 0), 0), 0)
+    def call(self, inputs):
+        _, kernel_b = xnorize(self.kernel, self.H)
+        _, inputs_b = xnorize(inputs)
+        outputs = K.conv2d(inputs_b, kernel_b, strides=self.strides,
+                           padding=self.padding,
+                           data_format=self.data_format,
+                           dilation_rate=self.dilation_rate)
+
+        # calculate Wa and xa
+        
+        # kernel_a
+        mask = K.reshape(self.kernel, (-1, self.filters)) # self.nb_row * self.nb_col * channels, filters 
+        kernel_a = K.stop_gradient(K.mean(K.abs(mask), axis=0)) # filters
+        
+        # inputs_a
+        if self.data_format == 'channels_first':
+            channel_axis = 1
+        else:
+            channel_axis = -1 
+        mask = K.mean(K.abs(inputs), axis=channel_axis, keepdims=True) 
+        ones = K.ones(self.kernel_size + (1, 1))
+        inputs_a = K.conv2d(mask, ones, strides=self.strides,
+                      padding=self.padding,
+                      data_format=self.data_format,
+                      dilation_rate=self.dilation_rate) # nb_sample, 1, new_nb_row, new_nb_col
+        if self.data_format == 'channels_first':
+            outputs = outputs * K.stop_gradient(inputs_a) * K.expand_dims(K.expand_dims(K.expand_dims(kernel_a, 0), -1), -1)
+        else:
+            outputs = outputs * K.stop_gradient(inputs_a) * K.expand_dims(K.expand_dims(K.expand_dims(kernel_a, 0), 0), 0)
                                 
-        if self.bias:
-            if self.dim_ordering == 'th':
-                conv_out = conv_out + K.reshape(self.b, (1, self.nb_filter, 1, 1))
-            elif self.dim_ordering == 'tf':
-                conv_out = conv_out + K.reshape(self.b, (1, 1, 1, self.nb_filter))
-            else:
-                raise ValueError('Invalid dim_ordering: ' + self.dim_ordering)
-                
-        output = self.activation(conv_out)
-        return output
+        if self.use_bias:
+            outputs = K.bias_add(
+                outputs,
+                self.bias,
+                data_format=self.data_format)
+
+        if self.activation is not None:
+            return self.activation(outputs)
+        return outputs
 
 
 # Aliases
 
-XnorConv2D = XnorConvolution2D
+XnorConvolution2D = XnorConv2D
