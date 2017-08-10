@@ -19,13 +19,13 @@ def _dropout(x, level, noise_shape=None, seed=None):
 
 
 class QRNN(Layer):
-    '''Qausi RNN
+    '''Quasi RNN
 
     # Arguments
         units: dimension of the internal projections and the final output.
 
     # References
-        - [Qausi-recurrent Neural Networks](http://arxiv.org/abs/1611.01576)
+        - [Quasi-recurrent Neural Networks](http://arxiv.org/abs/1611.01576)
     '''
     def __init__(self, units, window_size=2, stride=1,
                  return_sequences=False, go_backwards=False, 
