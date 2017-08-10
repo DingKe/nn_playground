@@ -23,8 +23,7 @@ class Clip(constraints.Constraint):
         return K.clip(p, self.min_value, self.max_value)
 
     def get_config(self):
-        return {"name": self.__call__.__name__,
-                "min_value": self.min_value,
+        return {"min_value": self.min_value,
                 "max_value": self.max_value}
 
 

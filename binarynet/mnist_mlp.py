@@ -17,7 +17,9 @@ from keras.callbacks import LearningRateScheduler
 from keras.utils import np_utils
 
 from binary_ops import binary_tanh as binary_tanh_op
-from binary_layers import BinaryDense
+from binary_layers import BinaryDense, Clip
+
+from keras.models import load_model
 
 
 class DropoutNoScale(Dropout):
@@ -95,6 +97,13 @@ model.summary()
 
 opt = Adam(lr=lr_start) 
 model.compile(loss='squared_hinge', optimizer=opt, metrics=['acc'])
+
+# deserialized custom layers
+#model.save('mlp.h5')
+#model = load_model('mlp.h5', custom_objects={'DropoutNoScale': DropoutNoScale,
+#                                             'BinaryDense': BinaryDense,
+#                                             'Clip': Clip, 
+#                                             'binary_tanh': binary_tanh})
 
 lr_scheduler = LearningRateScheduler(lambda e: lr_start * lr_decay ** e)
 history = model.fit(X_train, Y_train,
