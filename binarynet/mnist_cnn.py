@@ -82,7 +82,7 @@ model.add(Activation(binary_tanh, name='act1'))
 model.add(BinaryConv2D(128, kernel_size=kernel_size, H=H, kernel_lr_multiplier=kernel_lr_multiplier, 
                        data_format='channels_first',
                        padding='same', use_bias=use_bias, name='conv2'))
-model.add(MaxPooling2D(pool_size=pool_size, name='pool2'))
+model.add(MaxPooling2D(pool_size=pool_size, name='pool2', data_format='channels_first'))
 model.add(BatchNormalization(epsilon=epsilon, momentum=momentum, axis=1, name='bn2'))
 model.add(Activation(binary_tanh, name='act2'))
 # conv3
@@ -95,7 +95,7 @@ model.add(Activation(binary_tanh, name='act3'))
 model.add(BinaryConv2D(256, kernel_size=kernel_size, H=H, kernel_lr_multiplier=kernel_lr_multiplier,
                        data_format='channels_first',
                        padding='same', use_bias=use_bias, name='conv4'))
-model.add(MaxPooling2D(pool_size=pool_size, name='pool4'))
+model.add(MaxPooling2D(pool_size=pool_size, name='pool4', data_format='channels_first'))
 model.add(BatchNormalization(epsilon=epsilon, momentum=momentum, axis=1, name='bn4'))
 model.add(Activation(binary_tanh, name='act4'))
 model.add(Flatten())
