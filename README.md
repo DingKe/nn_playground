@@ -34,5 +34,8 @@ Generalized Loss Sensitive GAN
 # focal_loss
 Focal Loss
 
+# senet
+Squeeze-and-Excitation Networks
+
 Note:
 By default, all keras scripts run on tensorflow backend with image_data_format 'channels_first'.
