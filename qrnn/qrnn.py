@@ -121,7 +121,7 @@ class QRNN(Layer):
         initial_states = [initial_state for _ in range(len(self.states))]
         return initial_states
 
-    def reset_states(self):
+    def reset_states(self, states=None):
         if not self.stateful:
             raise AttributeError('Layer must be stateful.')
         if not self.input_spec:
@@ -140,31 +140,30 @@ class QRNN(Layer):
                              '- If using the functional API, specify '
                              'the time dimension by passing a '
                              '`batch_shape` argument to your Input layer.')
-        if states_value is not None:
-            if not isinstance(states_value, (list, tuple)):
-                states_value = [states_value]
-            if len(states_value) != len(self.states):
-                raise ValueError('The layer has ' + str(len(self.states)) +
-                                 ' states, but the `states_value` '
-                                 'argument passed '
-                                 'only has ' + str(len(states_value)) +
-                                 ' entries')
+
         if self.states[0] is None:
             self.states = [K.zeros((batch_size, self.units))
                            for _ in self.states]
-            if not states_value:
-                return
-        for i, state in enumerate(self.states):
-            if states_value:
-                value = states_value[i]
+        elif states is None:
+            for state in self.states:
+                K.set_value(state, np.zeros((batch_size, self.units)))
+        else:
+            if not isinstance(states, (list, tuple)):
+                states = [states]
+            if len(states) != len(self.states):
+                raise ValueError('Layer ' + self.name + ' expects ' +
+                                 str(len(self.states)) + ' states, '
+                                 'but it received ' + str(len(states)) +
+                                 'state values. Input received: ' +
+                                 str(states))
+            for index, (value, state) in enumerate(zip(states, self.states)):
                 if value.shape != (batch_size, self.units):
-                    raise ValueError(
-                        'Expected state #' + str(i) +
-                        ' to have shape ' + str((batch_size, self.units)) +
-                        ' but got array with shape ' + str(value.shape))
-            else:
-                value = np.zeros((batch_size, self.units))
-            K.set_value(state, value)
+                    raise ValueError('State ' + str(index) +
+                                     ' is incompatible with layer ' +
+                                     self.name + ': expected shape=' +
+                                     str((batch_size, self.units)) +
+                                     ', found shape=' + str(value.shape))
+                K.set_value(state, value)
 
     def __call__(self, inputs, initial_state=None, **kwargs):
         # If `initial_state` is specified,
@@ -266,7 +265,7 @@ class QRNN(Layer):
                           data_format='channels_last')
         output = K.squeeze(output, 2)  # remove the dummy dimension
         if self.use_bias:
-            ouput = K.bias_add(output, self.bias, data_format='channels_last')
+            output = K.bias_add(output, self.bias, data_format='channels_last')
 
         if self.dropout is not None and 0. < self.dropout < 1.:
             z = output[:, :, :self.units]
@@ -311,7 +310,7 @@ class QRNN(Layer):
                   'bias_initializer': initializers.serialize(self.bias_initializer),
                   'kernel_regularizer': regularizers.serialize(self.kernel_regularizer),
                   'bias_regularizer': regularizers.serialize(self.bias_regularizer),
-                  'activity_regularizer': regularizers.serialize(self.activy_regularizer),
+                  'activity_regularizer': regularizers.serialize(self.activity_regularizer),
                   'kernel_constraint': constraints.serialize(self.kernel_constraint),
                   'bias_constraint': constraints.serialize(self.bias_constraint),
                   'input_dim': self.input_dim,
