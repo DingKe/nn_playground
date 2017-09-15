@@ -198,14 +198,11 @@ class QRNN(Layer):
         # input shape: `(samples, time (padded with zeros), input_dim)`
         # note that the .build() method of subclasses MUST define
         # self.input_spec and self.state_spec with complete input shapes.
-        if initial_state is not None:
-            if not isinstance(initial_state, (list, tuple)):
-                initial_states = [initial_state]
-            else:
-                initial_states = list(initial_state)
         if isinstance(inputs, list):
             initial_states = inputs[1:]
             inputs = inputs[0]
+        elif initial_state is not None:
+            pass
         elif self.stateful:
             initial_states = self.states
         else:
