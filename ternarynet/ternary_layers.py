@@ -87,7 +87,7 @@ class TernaryDense(Dense):
         config = {'H': self.H,
                   'kernel_lr_multiplier': self.kernel_lr_multiplier,
                   'bias_lr_multiplier': self.bias_lr_multiplier}
-        base_config = super(BinaryDense, self).get_config()
+        base_config = super(TernaryDense, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
 
 
