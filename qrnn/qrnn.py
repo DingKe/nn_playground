@@ -55,6 +55,7 @@ class QRNN(Layer):
         self.kernel_constraint = constraints.get(kernel_constraint)
         self.bias_constraint = constraints.get(bias_constraint)
 
+        self.recurrent_dropout = 0 #not used, added to maintain compatibility with keras.Bidirectional
         self.dropout = dropout
         self.supports_masking = True
         self.input_spec = [InputSpec(ndim=3)]
